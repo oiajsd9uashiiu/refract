@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refraction Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #controls {
+            background: #e0e0e0;
+            padding: 10px 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            border-bottom: 2px solid #ccc;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 150px;
+        }
+
+        .control-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        select, input[type="range"] {
+            width: 140px;
+            margin-bottom: 5px;
+        }
+
+        .custom-value {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        canvas {
+            background: white;
+            cursor: default;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <div class="control-group">
+            <label for="preset1">Top Medium</label>
+            <select id="preset1">
+                <option value="1.00" selected>Air (1.00)</option>
+                <option value="1.33">Water (1.33)</option>
+                <option value="1.50">Glass (1.50)</option>
+                <option value="2.42">Diamond (2.42)</option>
+                <option value="custom">Custom</option>
+            </select>
+            <div id="custom1-container" style="display:none; width:100%; text-align:center;">
+                <input type="range" id="custom1" min="1.00" max="3.00" step="0.01" value="1.00">
+                <div class="custom-value" id="val-custom1">1.00</div>
+            </div>
+            <div class="custom-value" id="display-n1">n = 1.00</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="preset2">Bottom Medium</label>
+            <select id="preset2">
+                <option value="1.00">Air (1.00)</option>
+                <option value="1.33" selected>Water (1.33)</option>
+                <option value="1.50">Glass (1.50)</option>
+                <option value="2.42">Diamond (2.42)</option>
+                <option value="custom">Custom</option>
+            </select>
+            <div id="custom2-container" style="display:none; width:100%; text-align:center;">
+                <input type="range" id="custom2" min="1.00" max="3.00" step="0.01" value="1.33">
+                <div class="custom-value" id="val-custom2">1.33</div>
+            </div>
+            <div class="custom-value" id="display-n2">n = 1.33</div>
+        </div>
+    </div>
+
+    <canvas id="simCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Presets
+        const presets = {
+            '1.00': 'Air',
+            '1.33': 'Water',
+            '1.50': 'Glass',
+            '2.42': 'Diamond'
+        };
+
+        // State
+        let n1 = 1.00;
+        let n2 = 1.33;
+        
+        // Laser state
+        const orbitRadius = 250;
+        let laserAngle = -Math.PI / 4; 
+        let boundaryY = 0;
+        let centerX = 0;
+        
+        // Sine Circle Radius
+        const SINE_RADIUS = 120;
+
+        // Zoom and Pan state
+        let zoom = 1.0;
+        let panX = 0;
+        let panY = 0;
+        const minZoom = 0.2;
+        const maxZoom = 5.0;
+
+        // Ruler state
+        let ruler = {
+            x: -100, 
+            y: 100,  
+            width: 300,
+            height: 40,
+            isDragging: false,
+            dragOffsetX: 0,
+            dragOffsetY: 0
+        };
+
+        // UI Elements
+        const preset1 = document.getElementById('preset1');
+        const preset2 = document.getElementById('preset2');
+        const custom1Container = document.getElementById('custom1-container');
+        const custom2Container = document.getElementById('custom2-container');
+        const custom1Slider = document.getElementById('custom1');
+        const custom2Slider = document.getElementById('custom2');
+        const valCustom1 = document.getElementById('val-custom1');
+        const valCustom2 = document.getElementById('val-custom2');
+        const displayN1 = document.getElementById('display-n1');
+        const displayN2 = document.getElementById('display-n2');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - document.getElementById('controls').offsetHeight;
+            boundaryY = canvas.height / 2;
+            centerX = canvas.width / 2;
+            draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function handlePresetChange(presetSelect, customContainer, customSlider, valDisplay, displayN, isTop) {
+            const value = presetSelect.value;
+            if (value === 'custom') {
+                customContainer.style.display = 'block';
+                const n = parseFloat(customSlider.value);
+                if (isTop) n1 = n; else n2 = n;
+                valDisplay.textContent = n.toFixed(2);
+                displayN.textContent = 'n = ' + n.toFixed(2) + ' (Custom)';
+            } else {
+                customContainer.style.display = 'none';
+                const n = parseFloat(value);
+                if (isTop) n1 = n; else n2 = n;
+                displayN.textContent = 'n = ' + n.toFixed(2) + ' (' + presets[value] + ')';
+            }
+            draw();
+        }
+
+        preset1.addEventListener('change', () => handlePresetChange(preset1, custom1Container, custom1Slider, valCustom1, displayN1, true));
+        preset2.addEventListener('change', () => handlePresetChange(preset2, custom2Container, custom2Slider, valCustom2, displayN2, false));
+
+        custom1Slider.addEventListener('input', (e) => {
+            n1 = parseFloat(e.target.value);
+            valCustom1.textContent = n1.toFixed(2);
+            displayN1.textContent = 'n = ' + n1.toFixed(2) + ' (Custom)';
+            draw();
+        });
+
+        custom2Slider.addEventListener('input', (e) => {
+            n2 = parseFloat(e.target.value);
+            valCustom2.textContent = n2.toFixed(2);
+            displayN2.textContent = 'n = ' + n2.toFixed(2) + ' (Custom)';
+            draw();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomIntensity = 0.1;
+            const delta = e.deltaY < 0 ? 1 : -1;
+            const newZoom = zoom + delta * zoomIntensity;
+            
+            if (newZoom >= minZoom && newZoom <= maxZoom) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const worldX = (mouseX - centerX - panX) / zoom;
+                const worldY = (mouseY - boundaryY - panY) / zoom;
+                zoom = newZoom;
+                panX = mouseX - centerX - worldX * zoom;
+                panY = mouseY - boundaryY - worldY * zoom;
+                draw();
+            }
+        });
+
+        let isDraggingLaser = false;
+        let isPanning = false;
+        let panStartX = 0;
+        let panStartY = 0;
+
+        function getWorldCoords(mouseX, mouseY) {
+            return {
+                x: (mouseX - centerX - panX) / zoom,
+                y: (mouseY - boundaryY - panY) / zoom
+            };
+        }
+
+        // Helper function to calculate sine line positions
+        function getSineLinePositions() {
+            const laserX = orbitRadius * Math.cos(laserAngle);
+            const incDirX = -laserX / orbitRadius;
+            const sinTheta1 = Math.abs(incDirX);
+            const theta1 = Math.asin(sinTheta1);
+            
+            let theta2 = 0;
+            let tir = false;
+            if (Math.abs(n1 - n2) < 0.001) {
+                theta2 = theta1;
+            } else {
+                const sinTheta2 = (n1 / n2) * sinTheta1;
+                if (sinTheta2 > 1.0) {
+                    tir = true;
+                } else {
+                    theta2 = Math.asin(sinTheta2);
+                }
+            }
+            
+            const P1_y = -SINE_RADIUS * Math.cos(theta1);
+            const P2_y = !tir ? SINE_RADIUS * Math.cos(theta2) : null;
+            
+            return { P1_y, P2_y, theta1, theta2, tir, sinTheta1, sinTheta2: tir ? 0 : Math.sin(theta2) };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const world = getWorldCoords(mouseX, mouseY);
+            
+            const laserWorldX = orbitRadius * Math.cos(laserAngle);
+            const laserWorldY = orbitRadius * Math.sin(laserAngle);
+            const distToLaser = Math.sqrt((world.x - laserWorldX) ** 2 + (world.y - laserWorldY) ** 2);
+            
+            if (distToLaser < 30 && world.y < 0) {
+                isDraggingLaser = true;
+            } else if (isPointOnRuler(world.x, world.y)) {
+                ruler.isDragging = true;
+                ruler.dragOffsetX = world.x - ruler.x;
+                ruler.dragOffsetY = world.y - ruler.y;
+                canvas.style.cursor = 'grabbing';
+            } else {
+                isPanning = true;
+                panStartX = mouseX;
+                panStartY = mouseY;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const world = getWorldCoords(mouseX, mouseY);
+            
+            if (isDraggingLaser) {
+                const dx = world.x;
+                const dy = world.y;
+                if (world.y < 0) {
+                    laserAngle = Math.atan2(dy, dx);
+                    if (laserAngle > 0) laserAngle = laserAngle - Math.PI;
+                    draw();
+                }
+            } else if (ruler.isDragging) {
+                ruler.x = world.x - ruler.dragOffsetX;
+                ruler.y = world.y - ruler.dragOffsetY;
+
+                const snapThreshold = 15;
+                
+                // Snap to sine lines (x₁ and x₂)
+                const { P1_y, P2_y } = getSineLinePositions();
+                if (Math.abs(ruler.y - P1_y) < snapThreshold) ruler.y = P1_y;
+                else if (P2_y !== null && Math.abs(ruler.y - P2_y) < snapThreshold) ruler.y = P2_y;
+                
+                // Snap to normal line (0cm and 30cm marks)
+                if (Math.abs(ruler.x) < snapThreshold) ruler.x = 0; 
+                else if (Math.abs(ruler.x + ruler.width) < snapThreshold) ruler.x = -ruler.width; 
+
+                draw();
+            } else if (isPanning) {
+                const dx = mouseX - panStartX;
+                const dy = mouseY - panStartY;
+                panX += dx;
+                panY += dy;
+                panStartX = mouseX;
+                panStartY = mouseY;
+                draw();
+            } else {
+                const laserWorldX = orbitRadius * Math.cos(laserAngle);
+                const laserWorldY = orbitRadius * Math.sin(laserAngle);
+                const distToLaser = Math.sqrt((world.x - laserWorldX) ** 2 + (world.y - laserWorldY) ** 2);
+                
+                if (distToLaser < 30 && world.y < 0) canvas.style.cursor = 'pointer';
+                else if (isPointOnRuler(world.x, world.y)) canvas.style.cursor = 'grab';
+                else canvas.style.cursor = 'grab';
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingLaser = false;
+            ruler.isDragging = false;
+            isPanning = false;
+            canvas.style.cursor = 'default';
+        });
+
+        function isPointOnRuler(worldX, worldY) {
+            return worldX >= ruler.x && worldX <= ruler.x + ruler.width &&
+                   worldY >= ruler.y && worldY <= ruler.y + ruler.height;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(centerX + panX, boundaryY + panY);
+            ctx.scale(zoom, zoom);
+            
+            const worldLeft = (-centerX - panX) / zoom;
+            const worldTop = (-boundaryY - panY) / zoom;
+            const worldWidth = canvas.width / zoom;
+            const worldHeight = canvas.height / zoom;
+            
+            // Backgrounds
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(worldLeft, worldTop, worldWidth, -worldTop);
+            ctx.fillStyle = 'rgba(100, 180, 255, 0.15)';
+            ctx.fillRect(worldLeft, 0, worldWidth, worldHeight);
+            
+            // Boundary
+            ctx.beginPath();
+            ctx.moveTo(worldLeft, 0);
+            ctx.lineTo(worldLeft + worldWidth, 0);
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 2 / zoom;
+            ctx.stroke();
+            
+            // Normal Line
+            ctx.beginPath();
+            ctx.setLineDash([8 / zoom, 8 / zoom]);
+            ctx.moveTo(0, worldTop);
+            ctx.lineTo(0, worldTop + worldHeight);
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1.5 / zoom;
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Physics & Sine Lines
+            const { theta1, theta2, tir, sinTheta1, sinTheta2, P1_y, P2_y } = getSineLinePositions();
+            const laserX = orbitRadius * Math.cos(laserAngle);
+            const laserY = orbitRadius * Math.sin(laserAngle);
+            
+            // Sine Circle
+            ctx.beginPath();
+            ctx.arc(0, 0, SINE_RADIUS, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.lineWidth = 1 / zoom;
+            ctx.setLineDash([4/zoom, 4/zoom]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // x₁ measurement line
+            const x1 = SINE_RADIUS * sinTheta1;
+            const P1_x = laserX < 0 ? -x1 : x1;
+            ctx.beginPath();
+            ctx.moveTo(P1_x, P1_y);
+            ctx.lineTo(0, P1_y);
+            ctx.strokeStyle = '#00aa00';
+            ctx.lineWidth = 2 / zoom;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#00aa00';
+            ctx.font = `bold ${12/zoom}px Arial`;
+            ctx.textAlign = laserX < 0 ? 'right' : 'left';
+            ctx.fillText("x₁", laserX < 0 ? -3/zoom : 3/zoom, P1_y - 5/zoom);
+
+            // x₂ measurement line
+            if (!tir && sinTheta2 > 0.01) {
+                const x2 = SINE_RADIUS * sinTheta2;
+                const P2_x = laserX < 0 ? x2 : -x2;
+                ctx.beginPath();
+                ctx.moveTo(P2_x, P2_y);
+                ctx.lineTo(0, P2_y);
+                ctx.strokeStyle = '#00aa00';
+                ctx.lineWidth = 2 / zoom;
+                ctx.stroke();
+
+                ctx.fillStyle = '#00aa00';
+                ctx.textAlign = laserX < 0 ? 'left' : 'right';
+                ctx.fillText("x₂", laserX < 0 ? 3/zoom : -3/zoom, P2_y - 5/zoom);
+            }
+
+            // Orbit Path
+            ctx.beginPath();
+            ctx.arc(0, 0, orbitRadius, Math.PI, 0, true);
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.15)';
+            ctx.lineWidth = 2 / zoom;
+            ctx.stroke();
+            
+            // Incident Ray
+            ctx.beginPath();
+            ctx.moveTo(laserX, laserY);
+            ctx.lineTo(0, 0);
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 1 / zoom;
+            ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
+            ctx.shadowBlur = 5 / zoom;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            
+            // Refracted Ray
+            if (!tir) {
+                const side = laserX < 0 ? 1 : -1;
+                const endX = side * Math.sin(theta2) * 500;
+                const endY = Math.cos(theta2) * 500;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 1 / zoom;
+                ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
+                ctx.shadowBlur = 5 / zoom;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            } else {
+                const side = laserX < 0 ? -1 : 1;
+                const endX = side * Math.sin(theta1) * 300;
+                const endY = -Math.cos(theta1) * 300;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.lineWidth = 1 / zoom;
+                ctx.setLineDash([5 / zoom, 5 / zoom]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            drawLaserSource(laserX, laserY);
+            drawRuler();
+            ctx.restore();
+            
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", 20, 30);
+            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", 20, boundaryY + 30);
+        }
+
+        function drawLaserSource(worldX, worldY) {
+            ctx.save();
+            ctx.translate(worldX, worldY);
+            const angleToCenter = Math.atan2(-worldY, -worldX);
+            ctx.rotate(angleToCenter);
+            ctx.fillStyle = '#444';
+            ctx.beginPath(); ctx.roundRect(-20, -8, 35, 16, 3); ctx.fill();
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath(); ctx.arc(15, 0, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.beginPath(); ctx.arc(15, 0, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#222';
+            ctx.beginPath(); ctx.roundRect(-35, -4, 15, 8, 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawRuler() {
+            ctx.save();
+            ctx.translate(ruler.x, ruler.y);
+            const thinWidth = 0.5 / zoom; 
+            ctx.fillStyle = 'rgba(245, 245, 240, 0.7)';
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1.5 / zoom;
+            const extension = 15;
+            ctx.beginPath();
+            ctx.roundRect(-extension, 0, ruler.width + 2 * extension, ruler.height, 3);
+            ctx.fill(); ctx.stroke();
+            
+            const numCm = 30;
+            const pixelsPerCm = ruler.width / numCm;
+            const pixelsPerQuarterCm = pixelsPerCm / 4;
+            ctx.beginPath();
+            ctx.strokeStyle = '#333';
+            
+            for (let i = 0; i <= numCm; i++) {
+                const x = i * pixelsPerCm;
+                if (i < numCm) {
+                    for (let q = 1; q < 4; q++) {
+                        ctx.moveTo(i * pixelsPerCm + q * pixelsPerQuarterCm, 0);
+                        ctx.lineTo(i * pixelsPerCm + q * pixelsPerQuarterCm, 6);
+                        ctx.lineWidth = thinWidth;
+                    }
+                }
+                if (i % 5 === 0) {
+                    ctx.moveTo(x, 0); ctx.lineTo(x, 20);
+                    ctx.lineWidth = thinWidth;
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(i.toString(), x, 33);
+                } else if (i % 1 === 0) {
+                    ctx.moveTo(x, 0); ctx.lineTo(x, 12);
+                    ctx.lineWidth = thinWidth;
+                }
+            }
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText("cm", ruler.width - 5 + extension, -5);
+            ctx.restore();
+        }
+
+        window.onload = resizeCanvas;
+    </script>
+
+<script src="https://static.app/js/static.js" type="text/javascript"></script>
+</body>
+</html>
