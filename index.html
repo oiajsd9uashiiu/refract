@@ -460,8 +460,8 @@
             ctx.fillStyle = '#000';
             ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", 20, boundaryY + panY - 20);
-            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", 20, boundaryY + panY + 35);
+            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", 15, worldTop + 50 / zoom);
+            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", 15, 50 / zoom);
             
             drawLaserSource(laserX, laserY);
             drawRuler();
