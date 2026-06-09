@@ -390,7 +390,7 @@
             ctx.setLineDash([4/zoom, 4/zoom]);
             ctx.stroke();
             ctx.setLineDash([]);
-
+        
             // x₁ measurement line
             const x1 = SINE_RADIUS * sinTheta1;
             const P1_x = laserX < 0 ? -x1 : x1;
@@ -405,7 +405,7 @@
             ctx.font = `bold ${12/zoom}px Arial`;
             ctx.textAlign = laserX < 0 ? 'right' : 'left';
             ctx.fillText("x₁", laserX < 0 ? -3/zoom : 3/zoom, P1_y - 5/zoom);
-
+        
             // x₂ measurement line
             if (!tir && sinTheta2 > 0.01) {
                 const x2 = SINE_RADIUS * sinTheta2;
@@ -416,12 +416,12 @@
                 ctx.strokeStyle = '#00aa00';
                 ctx.lineWidth = 2 / zoom;
                 ctx.stroke();
-
+        
                 ctx.fillStyle = '#00aa00';
                 ctx.textAlign = laserX < 0 ? 'left' : 'right';
                 ctx.fillText("x₂", laserX < 0 ? 3/zoom : -3/zoom, P2_y - 5/zoom);
             }
-
+        
             // Orbit Path
             ctx.beginPath();
             ctx.arc(0, 0, orbitRadius, Math.PI, 0, true);
@@ -468,15 +468,17 @@
                 ctx.setLineDash([]);
             }
             
+            // Medium labels — positioned in world space so they move with pan/zoom
+            const labelFont = 16 / zoom;
+            ctx.fillStyle = '#000';
+            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.textAlign = 'left';
+            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", worldLeft + 20 / zoom, worldTop + 30 / zoom);
+            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", worldLeft + 20 / zoom, worldTop + 30 / zoom + canvas.height / (2 * zoom));
+            
             drawLaserSource(laserX, laserY);
             drawRuler();
             ctx.restore();
-            
-            ctx.fillStyle = '#000';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", 20, 30);
-            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", 20, boundaryY + 30);
         }
 
         function drawLaserSource(worldX, worldY) {
