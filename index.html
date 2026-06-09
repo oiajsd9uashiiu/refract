@@ -104,7 +104,6 @@
         const canvas = document.getElementById('simCanvas');
         const ctx = canvas.getContext('2d');
         
-        // Presets
         const presets = {
             '1.00': 'Air',
             '1.33': 'Water',
@@ -112,27 +111,22 @@
             '2.42': 'Diamond'
         };
 
-        // State
         let n1 = 1.00;
         let n2 = 1.33;
         
-        // Laser state
         const orbitRadius = 250;
         let laserAngle = -Math.PI / 4; 
         let boundaryY = 0;
         let centerX = 0;
         
-        // Sine Circle Radius
         const SINE_RADIUS = 120;
 
-        // Zoom and Pan state
         let zoom = 1.0;
         let panX = 0;
         let panY = 0;
         const minZoom = 0.2;
         const maxZoom = 5.0;
 
-        // Ruler state
         let ruler = {
             x: -100, 
             y: 100,  
@@ -143,7 +137,6 @@
             dragOffsetY: 0
         };
 
-        // UI Elements
         const preset1 = document.getElementById('preset1');
         const preset2 = document.getElementById('preset2');
         const custom1Container = document.getElementById('custom1-container');
@@ -230,7 +223,6 @@
             };
         }
 
-        // Helper function to calculate sine line positions
         function getSineLinePositions() {
             const laserX = orbitRadius * Math.cos(laserAngle);
             const incDirX = -laserX / orbitRadius;
@@ -300,13 +292,10 @@
                 ruler.y = world.y - ruler.dragOffsetY;
 
                 const snapThreshold = 15;
-                
-                // Snap to sine lines (x₁ and x₂)
                 const { P1_y, P2_y } = getSineLinePositions();
                 if (Math.abs(ruler.y - P1_y) < snapThreshold) ruler.y = P1_y;
                 else if (P2_y !== null && Math.abs(ruler.y - P2_y) < snapThreshold) ruler.y = P2_y;
                 
-                // Snap to normal line (0cm and 30cm marks)
                 if (Math.abs(ruler.x) < snapThreshold) ruler.x = 0; 
                 else if (Math.abs(ruler.x + ruler.width) < snapThreshold) ruler.x = -ruler.width; 
 
@@ -390,7 +379,7 @@
             ctx.setLineDash([4/zoom, 4/zoom]);
             ctx.stroke();
             ctx.setLineDash([]);
-        
+
             // x₁ measurement line
             const x1 = SINE_RADIUS * sinTheta1;
             const P1_x = laserX < 0 ? -x1 : x1;
@@ -405,7 +394,7 @@
             ctx.font = `bold ${12/zoom}px Arial`;
             ctx.textAlign = laserX < 0 ? 'right' : 'left';
             ctx.fillText("x₁", laserX < 0 ? -3/zoom : 3/zoom, P1_y - 5/zoom);
-        
+
             // x₂ measurement line
             if (!tir && sinTheta2 > 0.01) {
                 const x2 = SINE_RADIUS * sinTheta2;
@@ -416,12 +405,12 @@
                 ctx.strokeStyle = '#00aa00';
                 ctx.lineWidth = 2 / zoom;
                 ctx.stroke();
-        
+
                 ctx.fillStyle = '#00aa00';
                 ctx.textAlign = laserX < 0 ? 'left' : 'right';
                 ctx.fillText("x₂", laserX < 0 ? 3/zoom : -3/zoom, P2_y - 5/zoom);
             }
-        
+
             // Orbit Path
             ctx.beginPath();
             ctx.arc(0, 0, orbitRadius, Math.PI, 0, true);
@@ -467,14 +456,12 @@
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
-            
-            // Medium labels — positioned in world space so they move with pan/zoom
-            const labelFont = 16 / zoom;
+
             ctx.fillStyle = '#000';
-            ctx.font = `bold ${labelFont}px Arial`;
+            ctx.font = 'bold 16px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", worldLeft + 20 / zoom, worldTop + 30 / zoom);
-            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", worldLeft + 20 / zoom, worldTop + 30 / zoom + canvas.height / (2 * zoom));
+            ctx.fillText("Medium 1 (n=" + n1.toFixed(2) + ")", 20, boundaryY + panY - 20);
+            ctx.fillText("Medium 2 (n=" + n2.toFixed(2) + ")", 20, boundaryY + panY + 35);
             
             drawLaserSource(laserX, laserY);
             drawRuler();
